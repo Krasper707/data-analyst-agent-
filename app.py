@@ -29,15 +29,14 @@ async def analyze_data(
             return {"error": "Scraping task detected, but no URL was found."}
 
         # --- AGENT WORKFLOW ---
-        # 1. PERCEIVE: Await the async function
+        # 1. PERCEIVE
         print(f"Step 1: Fetching dynamic HTML from {url}")
-        # Add the 'await' keyword here!
         html_content = await tools.get_dynamic_html(url)
         if "Error" in html_content:
             return {"error": html_content}
 
-        # 2. DECIDE: This tool is synchronous, so no await is needed
-        print("Step 2: Asking LLM to choose the best table.")
+        # 2. DECIDE
+        print("Step 2: Asking LLM to choose the best table index.")
         task_description = f"Find a table with the following information: {questions_text}"
         choice_json_str = tools.choose_best_table_from_html(html_content, task_description)
         
@@ -45,35 +44,31 @@ async def analyze_data(
             choice = json.loads(choice_json_str)
             if "error" in choice:
                 return {"error": choice["error"]}
-            selector = choice.get("selector")
-            if not selector:
-                return {"error": "LLM failed to return a valid selector."}
+            table_index = choice.get("index") # Get the index from the LLM response
+            if table_index is None or not isinstance(table_index, int):
+                return {"error": "LLM failed to return a valid integer index for the table."}
         except json.JSONDecodeError:
             return {"error": f"Failed to decode LLM response for table choice: {choice_json_str}"}
 
-        # 3. ACT: This tool is synchronous
-        print(f"Step 3: Extracting table with selector '{selector}'.")
-        df_or_error = tools.extract_table_to_dataframe(html_content, selector)
+        # 3. ACT
+        print(f"Step 3: Extracting table with index '{table_index}'.")
+        df_or_error = tools.extract_table_to_dataframe(html_content, table_index) # Use the index
         if isinstance(df_or_error, str):
             return {"error": df_or_error}
         
-        # 4. ANALYSIS: The OpenAI call is synchronous in the SDK v1.0+
+        # 4. ANALYSIS (This part is unchanged)
         print("Step 4: Analyzing data with LLM.")
         data_string = df_or_error.to_csv(index=False)
         if len(data_string) > 15000:
             data_string = df_or_error.head(50).to_csv(index=False)
         
         system_prompt = """
-        You are an expert data analyst agent. You will be given a dataset in CSV format and a list of questions about it.
-        Your task is to answer the questions based *only* on the provided data.
-        Perform necessary data cleaning and type conversions mentally before answering (e.g., handle '$' signs, commas in numbers, dates).
-        Provide your final answers as a single JSON object, with a key named "answers" which contains a list of strings. Each string in the list should be the answer to one of the user's questions, in order.
-        For example: {"answers": ["Answer to Q1", "Answer to Q2"]}
+        You are an expert data analyst agent... Respond with a JSON object: {\"answers\": [...]}
         """
         user_prompt = f"Data:\n{data_string}\n\nQuestions:\n{questions_text}"
 
         try:
-            completion = client.chat.completions.create(model="gpt-5-nano", response_format={"type": "json_object"}, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
+            completion = client.chat.completions.create(model="gpt-4o", response_format={"type": "json_object"}, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
             response_data = json.loads(completion.choices[0].message.content)
             return response_data.get("answers", {"error": "LLM did not return answers in the expected format."})
         except Exception as e:
