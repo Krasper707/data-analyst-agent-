@@ -76,16 +76,33 @@ async def analyze_data(
         df_info = f"Here is the head of the pandas DataFrame, named 'df':\n{df_head}"
 
         system_prompt = """
-        You are an expert Python data analyst. You are given a description of a pandas DataFrame named 'df' and a set of questions.
-        Your task is to write a single Python script to answer these questions.
+        You are a world-class Python data analyst. You will be given the head of a pandas DataFrame named 'df' and a set of questions.
+        Your ONLY job is to write a Python script to answer the questions.
 
-        Guidelines:
-        1.  The DataFrame 'df' is already loaded and available in your environment.
-        2.  First, you MUST perform data cleaning. Pay close attention to columns with symbols like '$', ',', or text that needs to be converted to numbers. Use `pd.to_numeric` and string manipulation (`.str.replace()`). Handle potential errors during conversion by using `errors='coerce'`.
-        3.  Address each question from the user clearly.
-        4.  Use the `print()` function to output the final answer for each question. Start each print statement with a clear label (e.g., "Answer 1:", "Answer 2:").
-        5.  Do not include any example usage, comments, or explanations outside of the Python code block.
-        6.  The final output of your script should be ONLY the Python code itself.
+        **CRITICAL RULES:**
+        1.  The DataFrame `df` is already loaded in memory. Do NOT load the data.
+        2.  You MUST perform data cleaning first. The data is messy. Columns with numbers might be strings with symbols like '$' or ','. Use `df['col'].replace(...)` and `pd.to_numeric(..., errors='coerce')`.
+        3.  For EACH question, you MUST write code to calculate the answer and then immediately print the answer to the console using the `print()` function.
+        4.  Each print statement MUST be clear and self-contained.
+        5.  Your final output MUST ONLY BE THE PYTHON CODE, with no explanations, comments, or markdown.
+
+        **EXAMPLE OF A PERFECT SCRIPT:**
+        ```python
+        import pandas as pd
+        
+        # Data Cleaning
+        df['Worldwide gross'] = df['Worldwide gross'].replace({r'\\$': '', r',': ''}, regex=True)
+        df['Worldwide gross'] = pd.to_numeric(df['Worldwide gross'], errors='coerce')
+        df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
+        
+        # Question 1: How many movies grossed over $2.5B?
+        movies_over_2_5bn = df[df['Worldwide gross'] > 2500000000].shape[0]
+        print(f"Movies over $2.5B: {movies_over_2_5bn}")
+
+        # Question 2: What is the average gross of movies released in 2019?
+        avg_gross_2019 = df[df['Year'] == 2019]['Worldwide gross'].mean()
+        print(f"Average gross for 2019 movies: ${avg_gross_2019:,.2f}")
+        ```
         """
         user_prompt = f"{df_info}\n\nPlease write a Python script to answer the following questions:\n\n{questions_text}"
 
@@ -104,6 +121,8 @@ async def analyze_data(
             python_code = response_content.strip().replace("```python", "").replace("```", "").strip()
             
             # Step 5: ACT (Execution) - Run the generated code using our tool
+            print(f"--- Generated Python Code ---\n{python_code}\n-----------------------------")
+
             print("Step 5: Executing generated code.")
             execution_result = tools.run_python_code_on_dataframe(df, python_code)
             

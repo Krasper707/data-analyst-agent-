@@ -79,7 +79,7 @@ def extract_table_to_dataframe(html_content: str, table_index: int) -> (pd.DataF
     selected_table = tables[table_index]
     
     try:
-        df_list = pd.read_html(str(selected_table))
+        df_list = pd.read_html(io.StringIO(str(selected_table)))
         if not df_list:
             return "Error: Pandas could not parse the selected table."
         return df_list[0]
