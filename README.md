@@ -25,7 +25,7 @@ This project demonstrates an advanced **Planner-Executor** agent architecture, w
 This project is built with a modern, robust tech stack designed for building AI-powered applications.
 
 -   **Backend:** FastAPI (Python)
--   **LLM Orchestration:** Custom Planner-Executor loop with OpenAI's `gpt-4o`
+-   **LLM Orchestration:** Custom Planner-Executor loop with OpenAI's `gpt-5-nano`
 -   **Data Handling:** Pandas, NumPy
 -   **Web Scraping:** Playwright (for dynamic sites), BeautifulSoup4 (for parsing)
 -   **Visualization:** Matplotlib, Seaborn
