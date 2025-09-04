@@ -9,6 +9,17 @@ import re
 import io
 import sys
 from contextlib import redirect_stdout
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+import numpy as np
+import base64
+
+
+
+
 client = None
 def set_openai_client(c):
     global client
@@ -90,30 +101,36 @@ def extract_table_to_dataframe(html_content: str, table_index: int) -> (pd.DataF
 
 def run_python_code_on_dataframe(df: pd.DataFrame, python_code: str) -> str:
     """
-    Executes Python code with a DataFrame named 'df' available in the local scope.
+    Executes Python code with a DataFrame and common libraries available.
     Captures and returns any output printed to stdout.
     """
-    # Create a string stream to capture stdout
     output_stream = io.StringIO()
     
-    # Create a local scope for the exec to run in, with 'df' pre-populated
+    # --- ADD THE NEW LIBRARIES TO THE SCOPE ---
     local_scope = {
         'df': df,
         'pd': pd,
-        're': re
+        're': re,
+        'plt': plt,          # Matplotlib
+        'sns': sns,          # Seaborn
+        'np': np,            # NumPy
+        'LinearRegression': LinearRegression, # Scikit-learn
+        'io': io,            # IO for in-memory files
+        'base64': base64     # Base64 for encoding
     }
     
     try:
-        # Redirect stdout to our stream
         with redirect_stdout(output_stream):
-            # Execute the code in the defined scope
             exec(python_code, {'__builtins__': __builtins__}, local_scope)
         
-        # Get the captured output
+        # After execution, close any open matplotlib plots to free up memory
+        plt.close('all')
+            
         result = output_stream.getvalue()
         if not result:
             return "Code executed successfully with no printed output."
         return result
         
     except Exception as e:
-        return f"Error executing code: {e}\n---\nCode that failed:\n{python_code}"
+        plt.close('all') # Also close plots on error
+        return f"Error executing code: {type(e).__name__}: {e}\n---\nCode that failed:\n{python_code}"

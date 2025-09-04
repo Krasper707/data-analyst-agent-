@@ -8,3 +8,6 @@ lxml              # Add this line, it's a fast parser for BeautifulSoup
 pandas
 numpy 
 playwright  
+matplotlib  # For plotting
+seaborn     # For statistical plots
+scikit-learn # For regression calculations

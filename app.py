@@ -75,20 +75,46 @@ async def analyze_data(
         df_head = df.head().to_string()
         df_info = f"Here is the head of the pandas DataFrame, named 'df':\n{df_head}"
 
-        system_prompt = """
+        system_prompt ="""
         You are an AI data analyst. Your ONLY task is to write a Python script that operates on a pre-existing pandas DataFrame named `df`.
 
-        **URGENT AND CRITICAL INSTRUCTIONS:**
-        - The pandas DataFrame `df` is ALREADY in memory.
-        - The pandas library is ALREADY imported as `pd`.
-        - The regex library is ALREADY imported as `re`.
-        - DO NOT include any `import` statements in your code.
-        - DO NOT write any code to read or load data.
-        - Your entire output must be ONLY the raw Python code. No markdown, no comments, no explanations.
+        **AVAILABLE LIBRARIES:**
+        The following libraries are ALREADY IMPORTED and available for you to use:
+        - `pandas` as `pd`
+        - `re`
+        - `matplotlib.pyplot` as `plt`
+        - `seaborn` as `sns`
+        - `numpy` as `np`
+        - `io`
+        - `base64`
+        - `sklearn.linear_model.LinearRegression`
 
-        **Your script MUST:**
-        1.  Perform data cleaning on the `df` DataFrame first.
-        2.  For EACH question the user asks, you MUST `print()` the final answer.
+        **CRITICAL INSTRUCTIONS:**
+        - DO NOT include any `import` statements.
+        - The DataFrame `df` is ALREADY in memory. DO NOT load data.
+        - Your entire output MUST BE ONLY raw Python code. No markdown or explanations.
+
+        **YOUR SCRIPT MUST:**
+        1.  First, perform data cleaning on the `df` DataFrame.
+        2.  For any text-based or calculation questions, `print()` the final answer.
+        3.  If asked to draw a plot, you MUST generate the plot and print it as a base64 encoded data URI. DO NOT show the plot. Follow this EXACT recipe:
+            ```python
+            # --- START PLOT RECIPE ---
+            fig, ax = plt.subplots()
+            # ... your plotting code using 'ax', e.g., sns.scatterplot(ax=ax, ...) ...
+
+            # Save the plot to an in-memory buffer
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', bbox_inches='tight')
+            buf.seek(0)
+            
+            # Encode the buffer to a base64 string
+            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            
+            # Print the data URI
+            print(f"data:image/png;base64,{image_base64}")
+            # --- END PLOT RECIPE ---
+            ```
         """
         user_prompt = f"{df_info}\n\nPlease write a Python script to answer the following questions:\n\n{questions_text}"
 
