@@ -1,6 +1,6 @@
 # tools.py
 import pandas as pd
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import json
 import openai
@@ -12,19 +12,19 @@ def set_openai_client(c):
     global client
     client = c
 
-def get_dynamic_html(url: str) -> str:
-    """Fetches the fully rendered HTML of a page using Playwright."""
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
+async def get_dynamic_html(url: str) -> str:
+    """Fetches the fully rendered HTML of a page using Playwright's ASYNC API."""
+    # 'async with' is the asynchronous context manager
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
         try:
-            # Use networkidle to wait for most dynamic content to load
-            page.goto(url, timeout=20000, wait_until='networkidle')
-            html_content = page.content()
+            await page.goto(url, timeout=20000, wait_until='networkidle')
+            html_content = await page.content()
         except Exception as e:
-            browser.close()
+            await browser.close()
             return f"Error fetching page with Playwright: {e}"
-        browser.close()
+        await browser.close()
         return html_content
 
 def choose_best_table_from_html(html_content: str, task_description: str) -> str:
@@ -65,7 +65,7 @@ def choose_best_table_from_html(html_content: str, task_description: str) -> str
 
     try:
         completion = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5-nano",
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},
