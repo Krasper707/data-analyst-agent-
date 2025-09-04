@@ -2,42 +2,49 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from typing import List
 import os
+import openai # Import the openai library
 
 app = FastAPI()
 
-# A simple root endpoint to confirm the app is running
+# Initialize the OpenAI client.
+# It will automatically pick up the OPENAI_API_KEY and OPENAI_BASE_URL
+# from the environment variables (our Hugging Face Secrets).
+client = openai.OpenAI()
+
 @app.get("/")
 async def read_root():
     return {"message": "Data Analyst Agent API is running!"}
 
-# Our main API endpoint for data analysis tasks
 @app.post("/api/")
 async def analyze_data(
     questions_file: UploadFile = File(..., alias="questions.txt"),
-    files: List[UploadFile] = File([], alias="files"), # This will catch other files if sent
+    files: List[UploadFile] = File([], alias="files"),
 ):
     # Read the content of questions.txt
     questions_content = await questions_file.read()
     questions_text = questions_content.decode("utf-8")
 
-    response_messages = [f"Received questions:\n{questions_text}"]
+    # --- LLM INTEGRATION ---
+    llm_response_content = "No response from LLM." # Default message
+    try:
+        # Create a simple prompt for the LLM
+        completion = client.chat.completions.create(
+            model="gpt-5-nano", # You can try other models like "mistralai/mistral-7b-instruct"
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": f"Here are the questions I need answered:\n\n{questions_text}\n\nCan you acknowledge that you received them?"}
+            ]
+        )
+        llm_response_content = completion.choices[0].message.content
+    except Exception as e:
+        # If the LLM call fails, we'll know why
+        llm_response_content = f"Error calling LLM: {e}"
+    # --- END LLM INTEGRATION ---
 
-    # Process other uploaded files
-    for file in files:
-        # You would typically save these to a temporary location
-        # For now, just acknowledge receipt
-        response_messages.append(f"Received file: {file.filename} (Content-Type: {file.content_type})")
-        # Example: Save to a temporary file
-        # with open(f"/tmp/{file.filename}", "wb") as f:
-        #     f.write(await file.read())
-        # response_messages.append(f"Saved {file.filename} to /tmp/")
-
-
-    # This is where the core logic will go. For now, it's a placeholder.
-    # The LLM will process questions_text and use other files.
-    
-    return {"status": "Processing initiated", "details": response_messages}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=7860) # Hugging Face Spaces typically use port 7860
+    # We will build a more structured response later.
+    # For now, just return the raw LLM response.
+    return {
+        "status": "Processing complete",
+        "received_questions": questions_text,
+        "llm_acknowledgement": llm_response_content
+    }
