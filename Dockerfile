@@ -1,6 +1,6 @@
 # Use the official Playwright Docker image as a base for simplicity and reliability.
 # It comes with all necessary system dependencies pre-installed.
-FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.55.0-jammy
 
 # Set the working directory in the container
 WORKDIR /app
