@@ -76,33 +76,15 @@ async def analyze_data(
         df_info = f"Here is the head of the pandas DataFrame, named 'df':\n{df_head}"
 
         system_prompt = """
-        You are a world-class Python data analyst. You will be given the head of a pandas DataFrame named 'df' and a set of questions.
-        Your ONLY job is to write a Python script to answer the questions.
+        You are an AI data analyst. Your ONLY task is to write a Python script that operates on a pre-existing pandas DataFrame named `df`.
 
-        **CRITICAL RULES:**
-        1.  The DataFrame `df` is already loaded in memory. Do NOT load the data.
-        2.  You MUST perform data cleaning first. The data is messy. Columns with numbers might be strings with symbols like '$' or ','. Use `df['col'].replace(...)` and `pd.to_numeric(..., errors='coerce')`.
-        3.  For EACH question, you MUST write code to calculate the answer and then immediately print the answer to the console using the `print()` function.
-        4.  Each print statement MUST be clear and self-contained.
-        5.  Your final output MUST ONLY BE THE PYTHON CODE, with no explanations, comments, or markdown.
+        **URGENT AND CRITICAL INSTRUCTION:**
+        DO NOT write any code to read or load data (e.g., from a URL or file). The DataFrame `df` is ALREADY in memory. Start your script as if `df` is already defined.
 
-        **EXAMPLE OF A PERFECT SCRIPT:**
-        ```python
-        import pandas as pd
-        
-        # Data Cleaning
-        df['Worldwide gross'] = df['Worldwide gross'].replace({r'\\$': '', r',': ''}, regex=True)
-        df['Worldwide gross'] = pd.to_numeric(df['Worldwide gross'], errors='coerce')
-        df['Year'] = pd.to_numeric(df['Year'], errors='coerce')
-        
-        # Question 1: How many movies grossed over $2.5B?
-        movies_over_2_5bn = df[df['Worldwide gross'] > 2500000000].shape[0]
-        print(f"Movies over $2.5B: {movies_over_2_5bn}")
-
-        # Question 2: What is the average gross of movies released in 2019?
-        avg_gross_2019 = df[df['Year'] == 2019]['Worldwide gross'].mean()
-        print(f"Average gross for 2019 movies: ${avg_gross_2019:,.2f}")
-        ```
+        **Your script MUST:**
+        1.  Perform data cleaning on the `df` DataFrame. Columns that look like numbers may be strings with '$' or ',' symbols.
+        2.  For EACH question the user asks, you MUST `print()` the final answer.
+        3.  Your entire output must be ONLY the raw Python code. No markdown, no comments, no explanations.
         """
         user_prompt = f"{df_info}\n\nPlease write a Python script to answer the following questions:\n\n{questions_text}"
 
