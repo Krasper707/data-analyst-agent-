@@ -36,3 +36,16 @@ def scrape_url_to_dataframe(url: str) -> (pd.DataFrame | str):
         return f"Error fetching URL: {e}"
     except Exception as e:
         return f"An unexpected error occurred: {e}"
+    
+
+# from playwright.sync_api import sync_playwright
+
+# def scrape_dynamic_url(url: str) -> str:
+#     """Scrapes a dynamic URL using Playwright and returns the final HTML."""
+#     with sync_playwright() as p:
+#         browser = p.chromium.launch()
+#         page = browser.new_page()
+#         page.goto(url, wait_until='networkidle') # Wait for network activity to cease
+#         html_content = page.content()
+#         browser.close()
+#         return html_content
