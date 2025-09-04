@@ -1,51 +1,98 @@
 # tools.py
-import requests
-from bs4 import BeautifulSoup
 import pandas as pd
+from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
+import json
+import openai
 
-def scrape_url_to_dataframe(url: str) -> (pd.DataFrame | str):
+# Use the client initialized in the main app
+client = None
+
+def set_openai_client(c):
+    global client
+    client = c
+
+def get_dynamic_html(url: str) -> str:
+    """Fetches the fully rendered HTML of a page using Playwright."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        try:
+            # Use networkidle to wait for most dynamic content to load
+            page.goto(url, timeout=20000, wait_until='networkidle')
+            html_content = page.content()
+        except Exception as e:
+            browser.close()
+            return f"Error fetching page with Playwright: {e}"
+        browser.close()
+        return html_content
+
+def choose_best_table_from_html(html_content: str, task_description: str) -> str:
     """
-    Scrapes a given URL for the first HTML table and returns it as a pandas DataFrame.
-    If no table is found or an error occurs, it returns an error message string.
+    Uses an LLM to identify the best table in the HTML for a given task.
+    Returns a CSS selector for that table.
     """
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+    soup = BeautifulSoup(html_content, 'lxml')
+    tables = soup.find_all('table')
 
-        soup = BeautifulSoup(response.content, 'lxml')
+    if not tables:
+        return '{"error": "No tables found on the page."}'
+
+    table_summaries = []
+    for i, table in enumerate(tables):
+        # Create a unique, stable selector for each table
+        selector = f"table_{i}"
+        table['data-agent-selector'] = selector
         
-        # Find the first table in the HTML. Wikipedia pages often have the main data here.
-        table = soup.find('table', {'class': 'wikitable'})
+        # Get a small sample of the table's text content
+        rows = table.find_all('tr')
+        sample_text = ""
+        for row in rows[:3]:  # Sample first 3 rows
+            cells = row.find_all(['td', 'th'])
+            sample_text += " | ".join(cell.get_text(strip=True) for cell in cells[:4]) + "\n"
         
-        if not table:
-            return "Error: No table with class 'wikitable' found on the page."
-
-        # Use pandas to read the HTML table directly into a DataFrame
-        # read_html returns a list of DataFrames, we want the first one.
-        df_list = pd.read_html(str(table))
-        if not df_list:
-            return "Error: Pandas could not parse any tables from the HTML."
-            
-        df = df_list[0]
-        return df
-
-    except requests.exceptions.RequestException as e:
-        return f"Error fetching URL: {e}"
-    except Exception as e:
-        return f"An unexpected error occurred: {e}"
+        table_summaries.append({
+            "selector": selector,
+            "sample_data": sample_text.strip()
+        })
     
+    system_prompt = """
+    You are an expert web scraping assistant. I will provide a list of tables found on a webpage, each with a unique selector and a sample of its data.
+    Based on the user's task, your job is to identify the single best table that contains the relevant information.
+    Respond with a single JSON object containing the selector of the best table, like this: {"selector": "table_1"}
+    """
+    user_prompt = f"User's task: '{task_description}'\n\nHere are the tables I found:\n{json.dumps(table_summaries, indent=2)}"
 
-# from playwright.sync_api import sync_playwright
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        # We return the raw JSON string from the LLM
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f'{{"error": "LLM error in choosing table: {str(e)}"}}'
 
-# def scrape_dynamic_url(url: str) -> str:
-#     """Scrapes a dynamic URL using Playwright and returns the final HTML."""
-#     with sync_playwright() as p:
-#         browser = p.chromium.launch()
-#         page = browser.new_page()
-#         page.goto(url, wait_until='networkidle') # Wait for network activity to cease
-#         html_content = page.content()
-#         browser.close()
-#         return html_content
+def extract_table_to_dataframe(html_content: str, selector: str) -> (pd.DataFrame | str):
+    """Extracts a specific table from HTML using its selector into a DataFrame."""
+    soup = BeautifulSoup(html_content, 'lxml')
+    
+    # Find the table using our unique data attribute
+    selected_table = soup.find('table', {'data-agent-selector': selector})
+    
+    if not selected_table:
+        return f"Error: Could not find the table with selector '{selector}'."
+
+    try:
+        # We need to remove our custom attribute before pandas reads it
+        del selected_table['data-agent-selector']
+        df_list = pd.read_html(str(selected_table))
+        if not df_list:
+            return "Error: Pandas could not parse the selected table."
+        return df_list[0]
+    except Exception as e:
+        return f"Error converting table to DataFrame: {e}"
