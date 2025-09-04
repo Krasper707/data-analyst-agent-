@@ -78,13 +78,17 @@ async def analyze_data(
         system_prompt = """
         You are an AI data analyst. Your ONLY task is to write a Python script that operates on a pre-existing pandas DataFrame named `df`.
 
-        **URGENT AND CRITICAL INSTRUCTION:**
-        DO NOT write any code to read or load data (e.g., from a URL or file). The DataFrame `df` is ALREADY in memory. Start your script as if `df` is already defined.
+        **URGENT AND CRITICAL INSTRUCTIONS:**
+        - The pandas DataFrame `df` is ALREADY in memory.
+        - The pandas library is ALREADY imported as `pd`.
+        - The regex library is ALREADY imported as `re`.
+        - DO NOT include any `import` statements in your code.
+        - DO NOT write any code to read or load data.
+        - Your entire output must be ONLY the raw Python code. No markdown, no comments, no explanations.
 
         **Your script MUST:**
-        1.  Perform data cleaning on the `df` DataFrame. Columns that look like numbers may be strings with '$' or ',' symbols.
+        1.  Perform data cleaning on the `df` DataFrame first.
         2.  For EACH question the user asks, you MUST `print()` the final answer.
-        3.  Your entire output must be ONLY the raw Python code. No markdown, no comments, no explanations.
         """
         user_prompt = f"{df_info}\n\nPlease write a Python script to answer the following questions:\n\n{questions_text}"
 

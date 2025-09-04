@@ -4,7 +4,8 @@ from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import json
 import openai
-
+import pandas as pd
+import re
 import io
 import sys
 from contextlib import redirect_stdout
@@ -96,7 +97,11 @@ def run_python_code_on_dataframe(df: pd.DataFrame, python_code: str) -> str:
     output_stream = io.StringIO()
     
     # Create a local scope for the exec to run in, with 'df' pre-populated
-    local_scope = {'df': df}
+    local_scope = {
+        'df': df,
+        'pd': pd,
+        're': re
+    }
     
     try:
         # Redirect stdout to our stream
