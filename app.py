@@ -2,13 +2,14 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from typing import List
 import os
-import openai # Import the openai library
+import openai
+import json
+
+# Import our new tool
+from tools import scrape_url_to_dataframe
 
 app = FastAPI()
 
-# Initialize the OpenAI client.
-# It will automatically pick up the OPENAI_API_KEY and OPENAI_BASE_URL
-# from the environment variables (our Hugging Face Secrets).
 client = openai.OpenAI()
 
 @app.get("/")
@@ -20,31 +21,50 @@ async def analyze_data(
     questions_file: UploadFile = File(..., alias="questions.txt"),
     files: List[UploadFile] = File([], alias="files"),
 ):
-    # Read the content of questions.txt
-    questions_content = await questions_file.read()
-    questions_text = questions_content.decode("utf-8")
+    questions_text = (await questions_file.read()).decode("utf-8")
 
-    # --- LLM INTEGRATION ---
-    llm_response_content = "No response from LLM." # Default message
-    try:
-        # Create a simple prompt for the LLM
-        completion = client.chat.completions.create(
-            model="gpt-5-nano", # You can try other models like "mistralai/mistral-7b-instruct"
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": f"Here are the questions I need answered:\n\n{questions_text}\n\nCan you acknowledge that you received them?"}
-            ]
-        )
-        llm_response_content = completion.choices[0].message.content
-    except Exception as e:
-        # If the LLM call fails, we'll know why
-        llm_response_content = f"Error calling LLM: {e}"
-    # --- END LLM INTEGRATION ---
+    # --- LLM Decides Which Tool to Use ---
+    # We will use a more advanced agent framework later.
+    # For now, a simple keyword check is enough to demonstrate the concept.
+    
+    if "scrape" in questions_text.lower() and "http" in questions_text.lower():
+        # This is a scraping task. Let's find the URL.
+        url = None
+        for word in questions_text.split():
+            if word.startswith("http"):
+                url = word
+                break
+        
+        if not url:
+            return {"error": "Scraping task detected, but no URL found in the question."}
 
-    # We will build a more structured response later.
-    # For now, just return the raw LLM response.
-    return {
-        "status": "Processing complete",
-        "received_questions": questions_text,
-        "llm_acknowledgement": llm_response_content
-    }
+        # Call our scraping tool
+        scraped_data = scrape_url_to_dataframe(url)
+
+        # Check if the tool returned a DataFrame or an error string
+        if isinstance(scraped_data, str):
+            # The tool returned an error
+            return {"error": scraped_data}
+        
+        # For now, just return the first 5 rows of the DataFrame as JSON
+        # In the next step, the LLM will analyze this data.
+        return {
+            "status": "Scraping complete",
+            "url": url,
+            "data_preview": json.loads(scraped_data.head().to_json(orient="records"))
+        }
+
+    else:
+        # This is a general knowledge task, same as before.
+        try:
+            completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": questions_text}
+                ]
+            )
+            llm_response = completion.choices[0].message.content
+            return {"status": "LLM query complete", "response": llm_response}
+        except Exception as e:
+            return {"error": f"Error calling LLM: {e}"}

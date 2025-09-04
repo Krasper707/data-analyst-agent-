@@ -2,3 +2,6 @@ fastapi
 uvicorn
 python-multipart # Required for FastAPI to handle file uploads
 openai 
+requests          # Add this line for making HTTP requests
+beautifulsoup4    # Add this line for parsing HTML
+lxml              # Add this line, it's a fast parser for BeautifulSoup
