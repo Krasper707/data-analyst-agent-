@@ -5,6 +5,9 @@ from bs4 import BeautifulSoup
 import json
 import openai
 
+import io
+import sys
+from contextlib import redirect_stdout
 client = None
 def set_openai_client(c):
     global client
@@ -57,7 +60,7 @@ def choose_best_table_from_html(html_content: str, task_description: str) -> str
 
     try:
         completion = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5-nano",
             response_format={"type": "json_object"},
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         )
@@ -82,3 +85,30 @@ def extract_table_to_dataframe(html_content: str, table_index: int) -> (pd.DataF
         return df_list[0]
     except Exception as e:
         return f"Error converting table to DataFrame: {e}"
+    
+
+def run_python_code_on_dataframe(df: pd.DataFrame, python_code: str) -> str:
+    """
+    Executes Python code with a DataFrame named 'df' available in the local scope.
+    Captures and returns any output printed to stdout.
+    """
+    # Create a string stream to capture stdout
+    output_stream = io.StringIO()
+    
+    # Create a local scope for the exec to run in, with 'df' pre-populated
+    local_scope = {'df': df}
+    
+    try:
+        # Redirect stdout to our stream
+        with redirect_stdout(output_stream):
+            # Execute the code in the defined scope
+            exec(python_code, {'__builtins__': __builtins__}, local_scope)
+        
+        # Get the captured output
+        result = output_stream.getvalue()
+        if not result:
+            return "Code executed successfully with no printed output."
+        return result
+        
+    except Exception as e:
+        return f"Error executing code: {e}\n---\nCode that failed:\n{python_code}"

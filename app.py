@@ -5,15 +5,22 @@ import openai
 import json
 import pandas as pd
 
-# Import our new set of tools
+# Import our agent's tools
 import tools
 
+# Initialize FastAPI app
 app = FastAPI()
+
+# Initialize the OpenAI client.
+# It will automatically pick up credentials from Hugging Face Secrets.
 client = openai.OpenAI()
-tools.set_openai_client(client) # Give the tools module access to the client
+
+# Give the tools module access to the initialized OpenAI client
+tools.set_openai_client(client)
 
 @app.get("/")
 async def read_root():
+    """A simple root endpoint to confirm the API is running."""
     return {"message": "Data Analyst Agent API is running!"}
 
 @app.post("/api/")
@@ -21,59 +28,93 @@ async def analyze_data(
     questions_file: UploadFile = File(..., alias="questions.txt"),
     files: List[UploadFile] = File([], alias="files"),
 ):
+    """
+    Main endpoint to handle data analysis tasks. It orchestrates scraping,
+    data extraction, code generation, and code execution.
+    """
     questions_text = (await questions_file.read()).decode("utf-8")
     
+    # Simple router: Check if the task involves scraping a URL.
     if "scrape" in questions_text.lower() and "http" in questions_text.lower():
+        
+        # --- AGENT WORKFLOW ---
+
+        # Step 1: PERCEIVE - Get the fully rendered HTML from the URL using Playwright
+        print("Step 1: Fetching dynamic HTML from URL...")
         url = next((word for word in questions_text.split() if word.startswith("http")), None)
         if not url:
             return {"error": "Scraping task detected, but no URL was found."}
-
-        # --- AGENT WORKFLOW ---
-        # 1. PERCEIVE
-        print(f"Step 1: Fetching dynamic HTML from {url}")
+        
         html_content = await tools.get_dynamic_html(url)
-        if "Error" in html_content:
+        if isinstance(html_content, str) and "Error" in html_content:
             return {"error": html_content}
 
-        # 2. DECIDE
-        print("Step 2: Asking LLM to choose the best table index.")
-        task_description = f"Find a table with the following information: {questions_text}"
-        choice_json_str = tools.choose_best_table_from_html(html_content, task_description)
-        
+        # Step 2: DECIDE - Ask the LLM to identify the best table to use for the task
+        print("Step 2: Asking LLM to choose the best table index...")
+        choice_json_str = tools.choose_best_table_from_html(html_content, questions_text)
         try:
             choice = json.loads(choice_json_str)
             if "error" in choice:
                 return {"error": choice["error"]}
-            table_index = choice.get("index") # Get the index from the LLM response
+            table_index = choice.get("index")
             if table_index is None or not isinstance(table_index, int):
                 return {"error": "LLM failed to return a valid integer index for the table."}
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             return {"error": f"Failed to decode LLM response for table choice: {choice_json_str}"}
 
-        # 3. ACT
-        print(f"Step 3: Extracting table with index '{table_index}'.")
-        df_or_error = tools.extract_table_to_dataframe(html_content, table_index) # Use the index
-        if isinstance(df_or_error, str):
-            return {"error": df_or_error}
-        
-        # 4. ANALYSIS (This part is unchanged)
-        print("Step 4: Analyzing data with LLM.")
-        data_string = df_or_error.to_csv(index=False)
-        if len(data_string) > 15000:
-            data_string = df_or_error.head(50).to_csv(index=False)
-        
+        # Step 3: ACT (Extraction) - Extract the chosen table into a pandas DataFrame
+        print(f"Step 3: Extracting table with index '{table_index}'...")
+        df = tools.extract_table_to_dataframe(html_content, table_index)
+        if isinstance(df, str):
+            return {"error": df}
+
+        # --- STEP 4: GENERATE & EXECUTE PYTHON CODE ---
+        print("Step 4: Generating Python code for analysis...")
+
+        # Prepare a concise summary of the DataFrame for the LLM prompt
+        df_head = df.head().to_string()
+        df_info = f"Here is the head of the pandas DataFrame, named 'df':\n{df_head}"
+
         system_prompt = """
-        You are an expert data analyst agent... Respond with a JSON object: {\"answers\": [...]}
+        You are an expert Python data analyst. You are given a description of a pandas DataFrame named 'df' and a set of questions.
+        Your task is to write a single Python script to answer these questions.
+
+        Guidelines:
+        1.  The DataFrame 'df' is already loaded and available in your environment.
+        2.  First, you MUST perform data cleaning. Pay close attention to columns with symbols like '$', ',', or text that needs to be converted to numbers. Use `pd.to_numeric` and string manipulation (`.str.replace()`). Handle potential errors during conversion by using `errors='coerce'`.
+        3.  Address each question from the user clearly.
+        4.  Use the `print()` function to output the final answer for each question. Start each print statement with a clear label (e.g., "Answer 1:", "Answer 2:").
+        5.  Do not include any example usage, comments, or explanations outside of the Python code block.
+        6.  The final output of your script should be ONLY the Python code itself.
         """
-        user_prompt = f"Data:\n{data_string}\n\nQuestions:\n{questions_text}"
+        user_prompt = f"{df_info}\n\nPlease write a Python script to answer the following questions:\n\n{questions_text}"
 
         try:
-            completion = client.chat.completions.create(model="gpt-4o", response_format={"type": "json_object"}, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
-            response_data = json.loads(completion.choices[0].message.content)
-            return response_data.get("answers", {"error": "LLM did not return answers in the expected format."})
+            # Generate the Python code using the LLM
+            completion = client.chat.completions.create(
+                model="gpt-5-nano",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+            response_content = completion.choices[0].message.content
+            
+            # Extract the code from the markdown block (e.g., ```python\n...\n```)
+            python_code = response_content.strip().replace("```python", "").replace("```", "").strip()
+            
+            # Step 5: ACT (Execution) - Run the generated code using our tool
+            print("Step 5: Executing generated code.")
+            execution_result = tools.run_python_code_on_dataframe(df, python_code)
+            
+            # The result is the captured print output. Format it into a JSON array of strings.
+            final_answers = [line for line in execution_result.strip().split('\n') if line.strip()]
+            
+            return final_answers
+
         except Exception as e:
-            return {"error": f"Error during final analysis: {str(e)}"}
+            return {"error": f"An error occurred during code generation or execution: {str(e)}"}
 
     else:
-        # Handle non-scraping tasks here
+        # Handle non-scraping, general knowledge tasks
         return {"response": "This is a non-scraping task."}
