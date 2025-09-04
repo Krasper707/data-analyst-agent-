@@ -106,24 +106,28 @@ def run_python_code_on_dataframe(df: pd.DataFrame, python_code: str) -> str:
     """
     output_stream = io.StringIO()
     
-    # --- ADD THE NEW LIBRARIES TO THE SCOPE ---
-    local_scope = {
+    # --- THIS IS THE CORRECTED SANDBOX SETUP ---
+    # Create a single dictionary to serve as the global and local scope.
+    # This ensures that all libraries are accessible everywhere inside the exec'd code.
+    execution_scope = {
         'df': df,
         'pd': pd,
         're': re,
-        'plt': plt,          # Matplotlib
-        'sns': sns,          # Seaborn
-        'np': np,            # NumPy
-        'LinearRegression': LinearRegression, # Scikit-learn
-        'io': io,            # IO for in-memory files
-        'base64': base64     # Base64 for encoding
+        'plt': plt,
+        'sns': sns,
+        'np': np,
+        'LinearRegression': LinearRegression,
+        'io': io,
+        'base64': base64,
+        '__builtins__': __builtins__ # Ensure basic built-ins are available
     }
     
     try:
         with redirect_stdout(output_stream):
-            exec(python_code, {'__builtins__': __builtins__}, local_scope)
+            # Pass the scope dictionary as the 'globals' argument.
+            # This makes 'pd', 're', etc. globally available to the script.
+            exec(python_code, execution_scope)
         
-        # After execution, close any open matplotlib plots to free up memory
         plt.close('all')
             
         result = output_stream.getvalue()
@@ -132,5 +136,5 @@ def run_python_code_on_dataframe(df: pd.DataFrame, python_code: str) -> str:
         return result
         
     except Exception as e:
-        plt.close('all') # Also close plots on error
+        plt.close('all')
         return f"Error executing code: {type(e).__name__}: {e}\n---\nCode that failed:\n{python_code}"
