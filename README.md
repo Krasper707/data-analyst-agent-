@@ -1,7 +1,7 @@
 
 # Data Analyst Agent API
 
- <!-- Optional: Create a banner image for your project -->
+[Live Link](https://huggingface.co/spaces/Karthix1/data-analyst-agent)
 
 An intelligent API that leverages Large Language Models (LLMs) to function as an autonomous data analyst. This agent can source data from the web or uploaded files, prepare and clean it, perform complex analysis and calculations, and generate visualizations on demand.
 
